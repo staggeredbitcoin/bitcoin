@@ -255,9 +255,9 @@ std::vector<unsigned char> ParseHexUV(const UniValue& v, const std::string& strN
     return ParseHex(strHex);
 }
 
-int ParseSighashString(const UniValue& sighash)
+int ParseSighashString(const UniValue& sighash, bool enforce_forkid)
 {
-    int hash_type = SIGHASH_ALL;
+    int hash_type = SIGHASH_ALL | SIGHASH_FORKID;
     if (!sighash.isNull()) {
         static std::map<std::string, int> map_sighash_values = {
             {std::string("ALL"), int(SIGHASH_ALL)},
