@@ -261,9 +261,9 @@ private:
 
 public:
     SignatureExtractorChecker(SignatureData& sigdata, BaseSignatureChecker& checker) : sigdata(sigdata), checker(checker) {}
-    bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override
+    bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion, bool no_forkid) const override
     {
-        if (checker.CheckECDSASignature(scriptSig, vchPubKey, scriptCode, sigversion)) {
+      if (checker.CheckECDSASignature(scriptSig, vchPubKey, scriptCode, sigversion, no_forkid)) {
             CPubKey pubkey(vchPubKey);
             sigdata.signatures.emplace(pubkey.GetID(), SigPair(pubkey, scriptSig));
             return true;

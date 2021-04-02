@@ -197,6 +197,19 @@ bool static IsDefinedHashtypeSignature(const valtype &vchSig) {
     return true;
 }
 
+bool static UsesForkId(uint32_t nHashType) {
+    return nHashType & SIGHASH_FORKID;
+}
+
+bool static UsesForkId(const valtype &vchSig) {
+    uint32_t nHashType = GetHashType(vchSig);
+    return UsesForkId(nHashType);
+}
+
+bool static ForkIdDisabled(unsigned int flags) {
+    return flags & SCRIPT_FORKID_DISABLED;
+}
+
 bool CheckSignatureEncoding(const std::vector<unsigned char> &vchSig, unsigned int flags, ScriptError* serror) {
     // Empty signature. Not strictly DER encoded, but allowed to provide a
     // compact way to provide an invalid signature for use with CHECK(MULTI)SIG
@@ -360,7 +373,7 @@ static bool EvalChecksigPreTapscript(const valtype& vchSig, const valtype& vchPu
         //serror is set
         return false;
     }
-    fSuccess = checker.CheckECDSASignature(vchSig, vchPubKey, scriptCode, sigversion);
+    fSuccess = checker.CheckECDSASignature(vchSig, vchPubKey, scriptCode, sigversion, no_forkid);
 
     if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) && vchSig.size())
         return set_error(serror, SCRIPT_ERR_SIG_NULLFAIL);
@@ -1489,9 +1502,16 @@ static const CHashWriter HASHER_TAPBRANCH = TaggedHash("TapBranch");
 static const CHashWriter HASHER_TAPTWEAK = TaggedHash("TapTweak");
 
 template<typename T>
-bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache)
+bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, bool no_forkid)
 {
     uint8_t ext_flag, key_version;
+    int nForkHashType = hash_type;
+    if (!no_forkid) {
+        use_forkid = UsesForkId(hash_type);
+        if (use_forkid) {
+            nForkHashType |= forkid << 8;
+        }
+    }
     switch (sigversion) {
     case SigVersion::TAPROOT:
         ext_flag = 0;
@@ -1521,7 +1541,7 @@ bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata
     const uint8_t output_type = (hash_type == SIGHASH_DEFAULT) ? SIGHASH_ALL : (hash_type & SIGHASH_OUTPUT_MASK); // Default (no sighash byte) is equivalent to SIGHASH_ALL
     const uint8_t input_type = hash_type & SIGHASH_INPUT_MASK;
     if (!(hash_type <= 0x03 || (hash_type >= 0x81 && hash_type <= 0x83))) return false;
-    ss << hash_type;
+    ss << nForkHashType;
 
     // Transaction level data
     ss << tx_to.nVersion;
@@ -1574,7 +1594,7 @@ bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata
 }
 
 template <class T>
-uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn, int nHashType, const CAmount& amount, SigVersion sigversion, const PrecomputedTransactionData* cache, int forkid)
+uint256 SignatureHash(const CScript& scriptCode, const T& txTo, unsigned int nIn, int nHashType, const CAmount& amount, SigVersion sigversion, bool no_forkid, const PrecomputedTransactionData* cache, int forkid)
 {
     assert(nIn < txTo.vin.size());
 
@@ -1664,7 +1684,7 @@ bool GenericTransactionSignatureChecker<T>::VerifySchnorrSignature(Span<const un
 }
 
 template <class T>
-bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const
+bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vector<unsigned char>& vchSigIn, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion, bool no_forkid) const
 {
     CPubKey pubkey(vchPubKey);
     if (!pubkey.IsValid())
@@ -1677,7 +1697,7 @@ bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vecto
     int nHashType = vchSig.back();
     vchSig.pop_back();
 
-    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, this->txdata);
+    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, sigversion, no_forkid, this->txdata);
 
     if (!VerifyECDSASignature(vchSig, pubkey, sighash))
         return false;
