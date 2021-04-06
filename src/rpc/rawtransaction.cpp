@@ -686,6 +686,13 @@ static RPCHelpMan combinerawtransaction()
         view.SetBackend(viewDummy); // switch back to avoid locking mempool for too long
     }
 
+    bool no_forkid;
+    {
+        LOCK(cs_main);
+        no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
+    }
+
+
     // Use CTransaction for the constant parts of the
     // transaction to avoid rehashing.
     const CTransaction txConst(mergedTx);
@@ -704,7 +711,7 @@ static RPCHelpMan combinerawtransaction()
                 sigdata.MergeSignatureData(DataFromTransaction(txv, i, coin.out));
             }
         }
-        ProduceSignature(DUMMY_SIGNING_PROVIDER, MutableTransactionSignatureCreator(&mergedTx, i, coin.out.nValue, 1), coin.out.scriptPubKey, sigdata);
+        ProduceSignature(DUMMY_SIGNING_PROVIDER, MutableTransactionSignatureCreator(&mergedTx, i, coin.out.nValue, 1), coin.out.scriptPubKey, sigdata, no_forkid);
 
         UpdateInput(txin, sigdata);
     }
@@ -748,8 +755,14 @@ static RPCHelpMan signrawtransactionwithkey()
             "       \"NONE\"\n"
             "       \"SINGLE\"\n"
             "       \"ALL|ANYONECANPAY\"\n"
+            "       \"ALL|FORKID\"\n"
+            "       \"ALL|FORKID|ANYONECANPAY\"\n"
             "       \"NONE|ANYONECANPAY\"\n"
+            "       \"NONE|FORKID\"\n"
+            "       \"NONE|FORKID|ANYONECANPAY\"\n"
             "       \"SINGLE|ANYONECANPAY\"\n"
+            "       \"SINGLE|FORKID\"\n"
+            "       \"SINGLE|FORKID|ANYONECANPAY\"\n"
                     },
                 },
                 RPCResult{

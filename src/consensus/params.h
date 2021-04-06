@@ -55,6 +55,8 @@ struct Params {
     int BIP65Height;
     /** Block height at which BIP66 becomes active */
     int BIP66Height;
+    /** Block height at which Staggered Bitcoin hard fork becomes active */
+    int SBCHeight;
     /** Block height at which CSV (BIP68, BIP112 and BIP113) becomes active */
     int CSVHeight;
     /** Block height at which Segwit (BIP141, BIP143 and BIP147) becomes active.

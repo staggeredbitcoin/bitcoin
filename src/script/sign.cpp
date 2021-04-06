@@ -14,7 +14,7 @@
 
 typedef std::vector<unsigned char> valtype;
 
-MutableTransactionSignatureCreator::MutableTransactionSignatureCreator(const CMutableTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn, int nHashTypeIn) : txTo(txToIn), nIn(nInIn), nHashType(nHashTypeIn), amount(amountIn), checker(txTo, nIn, amountIn) {}
+MutableTransactionSignatureCreator::MutableTransactionSignatureCreator(const CMutableTransaction* txToIn, unsigned int nInIn, const CAmount& amountIn, bool no_forkid, int nHashTypeIn) : txTo(txToIn), nIn(nInIn), no_forkid(no_forkid), nHashType(nHashTypeIn), amount(amountIn), checker(txTo, nIn, amountIn) {}
 
 bool MutableTransactionSignatureCreator::CreateSig(const SigningProvider& provider, std::vector<unsigned char>& vchSig, const CKeyID& address, const CScript& scriptCode, SigVersion sigversion) const
 {
@@ -196,7 +196,7 @@ static CScript PushAll(const std::vector<valtype>& values)
     return result;
 }
 
-bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreator& creator, const CScript& fromPubKey, SignatureData& sigdata)
+bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreator& creator, const CScript& fromPubKey, SignatureData& sigdata, bool no_forkid)
 {
     if (sigdata.complete) return true;
 
@@ -248,7 +248,8 @@ bool ProduceSignature(const SigningProvider& provider, const BaseSignatureCreato
     sigdata.scriptSig = PushAll(result);
 
     // Test solution
-    sigdata.complete = solved && VerifyScript(sigdata.scriptSig, fromPubKey, &sigdata.scriptWitness, STANDARD_SCRIPT_VERIFY_FLAGS, creator.Checker());
+    unsigned int flag = no_forkid ? (STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_FORKID_DISABLED) : STANDARD_SCRIPT_VERIFY_FLAGS;
+    sigdata.complete = solved && VerifyScript(sigdata.scriptSig, fromPubKey, &sigdata.scriptWitness, flag, creator.Checker());
     return sigdata.complete;
 }
 
@@ -377,10 +378,11 @@ bool SignSignature(const SigningProvider &provider, const CScript& fromPubKey, C
 {
     assert(nIn < txTo.vin.size());
 
-    MutableTransactionSignatureCreator creator(&txTo, nIn, amount, nHashType);
+    bool no_forkid = !(nHashType & SIGHASH_FORKID);
+    MutableTransactionSignatureCreator creator(&txTo, nIn, amount, no_forkid, nHashType);
 
     SignatureData sigdata;
-    bool ret = ProduceSignature(provider, creator, fromPubKey, sigdata);
+    bool ret = ProduceSignature(provider, creator, fromPubKey, sigdata, no_forkid);
     UpdateInput(txTo.vin.at(nIn), sigdata);
     return ret;
 }
@@ -471,7 +473,7 @@ bool IsSegWitOutput(const SigningProvider& provider, const CScript& script)
 
 bool SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, const std::map<COutPoint, Coin>& coins, int nHashType, std::map<int, std::string>& input_errors)
 {
-    bool fHashSingle = ((nHashType & ~SIGHASH_ANYONECANPAY) == SIGHASH_SINGLE);
+    bool fHashSingle = ((nHashType & ~(SIGHASH_ANYONECANPAY | SIGHASH_FORKID)) == SIGHASH_SINGLE);
 
     // Use CTransaction for the constant parts of the
     // transaction to avoid rehashing.

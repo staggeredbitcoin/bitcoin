@@ -409,6 +409,7 @@ UniValue SendMoney(CWallet* const pwallet, const CCoinControl &coin_control, std
     bilingual_str error;
     CTransactionRef tx;
     FeeCalculation fee_calc_out;
+    bool no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
     bool fCreated = pwallet->CreateTransaction(recipients, tx, nFeeRequired, nChangePosRet, error, coin_control, fee_calc_out, !pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
     if (!fCreated) {
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, error.original);
@@ -4295,8 +4296,14 @@ static RPCHelpMan walletprocesspsbt()
             "       \"NONE\"\n"
             "       \"SINGLE\"\n"
             "       \"ALL|ANYONECANPAY\"\n"
+            "       \"ALL|FORKID\"\n"
+            "       \"ALL|FORKID|ANYONECANPAY\"\n"
             "       \"NONE|ANYONECANPAY\"\n"
-            "       \"SINGLE|ANYONECANPAY\""},
+            "       \"NONE|FORKID\"\n"
+            "       \"NONE|FORKID|ANYONECANPAY\"\n"
+            "       \"SINGLE|ANYONECANPAY\"\n"
+            "       \"SINGLE|FORKID\"\n"
+            "       \"SINGLE|FORKID|ANYONECANPAY\"\n"},
                     {"bip32derivs", RPCArg::Type::BOOL, /* default */ "true", "Include BIP 32 derivation paths for public keys if we know them"},
                 },
                 RPCResult{
@@ -4324,8 +4331,14 @@ static RPCHelpMan walletprocesspsbt()
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, strprintf("TX decode failed %s", error));
     }
 
+    bool no_forkid;
+    {
+        LOCK(cs_main);
+        no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
+    }
+
     // Get the sighash type
-    int nHashType = ParseSighashString(request.params[2]);
+    int nHashType = ParseSighashString(request.params[2], !no_forkid);
 
     // Fill transaction with our data and also sign
     bool sign = request.params[1].isNull() ? true : request.params[1].get_bool();

@@ -351,6 +351,23 @@ static bool IsCurrentForFeeEstimation() EXCLUSIVE_LOCKS_REQUIRED(cs_main)
     return true;
 }
 
+bool static IsSBCHardForkEnabled(int nHeight, const Consensus::Params& params) {
+    return nHeight >= params.SBCHeight;
+}
+
+bool IsSBCHardForkEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params) {
+    if (pindexPrev == nullptr) {
+        return false;
+    }
+
+    return IsSBCHardForkEnabled(pindexPrev->nHeight, params);
+}
+
+bool IsSBCHardForkEnabledForCurrentBlock(const Consensus::Params& params) {
+    AssertLockHeld(cs_main);
+    return IsSBCHardForkEnabled(::ChainActive().Tip(), params);
+}
+
 /* Make mempool consistent after a reorg, by re-adding or recursively erasing
  * disconnected block transactions from the mempool, and also removing any
  * other transactions from the mempool that are no longer valid given the new
