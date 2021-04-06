@@ -169,6 +169,13 @@ bool static IsValidSignatureEncoding(const std::vector<unsigned char> &sig) {
     return true;
 }
 
+uint32_t static GetHashType(const valtype &vchSig) {
+    if (vchSig.size() == 0)
+        return 0;
+    // check IsValidSignatureEncoding()'s comment for vchSig format
+    return vchSig.back();
+}
+
 bool static IsLowDERSignature(const valtype &vchSig, ScriptError* serror) {
     if (!IsValidSignatureEncoding(vchSig)) {
         return set_error(serror, SCRIPT_ERR_SIG_DER);
@@ -357,6 +364,7 @@ public:
 
 static bool EvalChecksigPreTapscript(const valtype& vchSig, const valtype& vchPubKey, CScript::const_iterator pbegincodehash, CScript::const_iterator pend, unsigned int flags, const BaseSignatureChecker& checker, SigVersion sigversion, ScriptError* serror, bool& fSuccess)
 {
+  bool no_forkid = flags & SCRIPT_FORKID_DISABLED;
     assert(sigversion == SigVersion::BASE || sigversion == SigVersion::WITNESS_V0);
 
     // Subset of script starting at the most recent codeseparator
@@ -1103,7 +1111,8 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                     valtype& vchSig    = stacktop(-2);
                     valtype& vchPubKey = stacktop(-1);
 
-                    bool fSuccess = true;
+		    
+		    bool fSuccess = true;
                     if (!EvalChecksig(vchSig, vchPubKey, pbegincodehash, pend, execdata, flags, checker, sigversion, serror, fSuccess)) return false;
                     popstack(stack);
                     popstack(stack);
@@ -1200,8 +1209,9 @@ bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& 
                             return false;
                         }
 
-                        // Check signature
-                        bool fOk = checker.CheckECDSASignature(vchSig, vchPubKey, scriptCode, sigversion);
+			bool no_forkid = ForkIdDisabled(flags);
+			// Check signature
+                        bool fOk = checker.CheckECDSASignature(vchSig, vchPubKey, scriptCode, sigversion, no_forkid);
 
                         if (fOk) {
                             isig++;
@@ -1502,10 +1512,11 @@ static const CHashWriter HASHER_TAPBRANCH = TaggedHash("TapBranch");
 static const CHashWriter HASHER_TAPTWEAK = TaggedHash("TapTweak");
 
 template<typename T>
-bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, const PrecomputedTransactionData& cache, bool no_forkid)
+bool SignatureHashSchnorr(uint256& hash_out, const ScriptExecutionData& execdata, const T& tx_to, uint32_t in_pos, uint8_t hash_type, SigVersion sigversion, bool no_forkid, const PrecomputedTransactionData& cache, int forkid=FORKID_IN_USE)
 {
     uint8_t ext_flag, key_version;
     int nForkHashType = hash_type;
+    bool use_forkid = false;
     if (!no_forkid) {
         use_forkid = UsesForkId(hash_type);
         if (use_forkid) {
@@ -1706,7 +1717,7 @@ bool GenericTransactionSignatureChecker<T>::CheckECDSASignature(const std::vecto
 }
 
 template <class T>
-bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(Span<const unsigned char> sig, Span<const unsigned char> pubkey_in, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror) const
+bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(Span<const unsigned char> sig, Span<const unsigned char> pubkey_in, SigVersion sigversion, const ScriptExecutionData& execdata, ScriptError* serror, bool no_forkid) const
 {
     assert(sigversion == SigVersion::TAPROOT || sigversion == SigVersion::TAPSCRIPT);
     // Schnorr signatures have 32-byte public keys. The caller is responsible for enforcing this.
@@ -1726,7 +1737,7 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(Span<const uns
     }
     uint256 sighash;
     assert(this->txdata);
-    if (!SignatureHashSchnorr(sighash, execdata, *txTo, nIn, hashtype, sigversion, *this->txdata)) {
+    if (!SignatureHashSchnorr(sighash, execdata, *txTo, nIn, hashtype, sigversion, no_forkid, *this->txdata)) {
         return set_error(serror, SCRIPT_ERR_SCHNORR_SIG_HASHTYPE);
     }
     if (!VerifySchnorrSignature(sig, pubkey, sighash)) return set_error(serror, SCRIPT_ERR_SCHNORR_SIG);
