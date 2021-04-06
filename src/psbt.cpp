@@ -2,7 +2,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+
 #include <psbt.h>
+#include <validation.h>
+#include <chainparams.h>
 
 #include <util/check.h>
 #include <util/strencodings.h>
@@ -221,7 +224,14 @@ void UpdatePSBTOutput(const SigningProvider& provider, PartiallySignedTransactio
     // Note that ProduceSignature is used to fill in metadata (not actual signatures),
     // so provider does not need to provide any private keys (it can be a HidingSigningProvider).
     MutableTransactionSignatureCreator creator(&tx, /* index */ 0, out.nValue, SIGHASH_ALL);
-    ProduceSignature(provider, creator, out.scriptPubKey, sigdata);
+    
+    bool no_forkid;
+    {
+        LOCK(cs_main);
+        no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
+    }
+
+    ProduceSignature(provider, creator, out.scriptPubKey, sigdata, no_forkid);
 
     // Put redeem_script, witness_script, key paths, into PSBTOutput.
     psbt_out.FromSignatureData(sigdata);
@@ -265,13 +275,19 @@ bool SignPSBTInput(const SigningProvider& provider, PartiallySignedTransaction& 
         return false;
     }
 
+    bool no_forkid;
+    {
+        LOCK(cs_main);
+        no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
+    }
+
     sigdata.witness = false;
     bool sig_complete;
     if (use_dummy) {
-        sig_complete = ProduceSignature(provider, DUMMY_SIGNATURE_CREATOR, utxo.scriptPubKey, sigdata);
+        sig_complete = ProduceSignature(provider, DUMMY_SIGNATURE_CREATOR, utxo.scriptPubKey, sigdata, no_forkid);
     } else {
         MutableTransactionSignatureCreator creator(&tx, index, utxo.nValue, sighash);
-        sig_complete = ProduceSignature(provider, creator, utxo.scriptPubKey, sigdata);
+        sig_complete = ProduceSignature(provider, creator, utxo.scriptPubKey, sigdata, no_forkid);
     }
     // Verify that a witness signature was produced in case one was required.
     if (require_witness_sig && !sigdata.witness) return false;

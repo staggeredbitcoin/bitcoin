@@ -3,6 +3,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <interfaces/wallet.h>
+#include <validation.h>
+#include <chainparams.h>
 
 #include <amount.h>
 #include <interfaces/chain.h>
@@ -245,7 +247,8 @@ public:
         LOCK(m_wallet->cs_wallet);
         CTransactionRef tx;
         FeeCalculation fee_calc_out;
-        if (!m_wallet->CreateTransaction(recipients, tx, fee, change_pos,
+        bool no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
+        if (!m_wallet->CreateTransaction(recipients, tx, fee, change_pos, no_forkid,
                 fail_reason, coin_control, fee_calc_out, sign)) {
             return {};
         }

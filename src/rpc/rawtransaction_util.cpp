@@ -4,6 +4,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <rpc/rawtransaction_util.h>
+#include <validation.h>
+#include <chainparams.h>
 
 #include <coins.h>
 #include <core_io.h>
@@ -277,7 +279,12 @@ void ParsePrevouts(const UniValue& prevTxsUnival, FillableSigningProvider* keyst
 
 void SignTransaction(CMutableTransaction& mtx, const SigningProvider* keystore, const std::map<COutPoint, Coin>& coins, const UniValue& hashType, UniValue& result)
 {
-    int nHashType = ParseSighashString(hashType);
+    bool no_forkid;
+    {
+        LOCK(cs_main);
+        no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
+    }
+    int nHashType = ParseSighashString(hashType, !no_forkid);
 
     // Script verification errors
     std::map<int, std::string> input_errors;

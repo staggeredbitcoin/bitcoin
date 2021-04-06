@@ -3,6 +3,9 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <validation.h>
+#include <chainparams.h>
+
 #include <amount.h>
 #include <core_io.h>
 #include <interfaces/chain.h>
@@ -410,7 +413,7 @@ UniValue SendMoney(CWallet* const pwallet, const CCoinControl &coin_control, std
     CTransactionRef tx;
     FeeCalculation fee_calc_out;
     bool no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
-    bool fCreated = pwallet->CreateTransaction(recipients, tx, nFeeRequired, nChangePosRet, error, coin_control, fee_calc_out, !pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
+    bool fCreated = pwallet->CreateTransaction(recipients, tx, nFeeRequired, nChangePosRet, no_forkid, error, coin_control, fee_calc_out, !pwallet->IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS));
     if (!fCreated) {
         throw JSONRPCError(RPC_WALLET_INSUFFICIENT_FUNDS, error.original);
     }
@@ -3381,7 +3384,15 @@ RPCHelpMan signrawtransactionwithwallet()
     // Parse the prevtxs array
     ParsePrevouts(request.params[1], nullptr, coins);
 
-    int nHashType = ParseSighashString(request.params[2]);
+
+    bool no_forkid;
+    {
+        LOCK(cs_main);
+        no_forkid = !IsSBCHardForkEnabledForCurrentBlock(Params().GetConsensus());
+    }
+
+    // Get the sighash type
+    int nHashType = ParseSighashString(request.params[2], !no_forkid);
 
     // Script verification errors
     std::map<int, std::string> input_errors;
