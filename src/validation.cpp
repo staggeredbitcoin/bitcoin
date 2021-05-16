@@ -352,7 +352,7 @@ static bool IsCurrentForFeeEstimation() EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 }
 
 bool static IsSBCHardForkEnabled(int nHeight, const Consensus::Params& params) {
-    return nHeight >= params.SBCHeight;
+  return ((int)gArgs.GetArg("-useforkchain", 0)!=0 && nHeight >= params.SBCHeight);
 }
 
 bool IsSBCHardForkEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params) {
